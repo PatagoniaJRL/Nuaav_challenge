@@ -1,2 +1,73 @@
 # Nuaav_challenge
 this si a code challenge for a job position 
+❄️ End-to-End Data Engineering Challenge: Snowflake Medallion Architecture
+This project demonstrates the implementation of a robust data architecture in Snowflake, transforming raw, inconsistent data from multiple sources into a high-quality analytical model (Gold) using the Medallion Architecture pattern.
+
+🏗️ Phase 1: Environment Setup & Governance
+To ensure an enterprise-grade environment, the project began by provisioning a Snowflake account and applying industry best practices for administration:
+
+Object Hierarchy: Creation of a dedicated database and logical schemas for process isolation: BRONZE, SILVER, and GOLD.
+
+RBAC (Role-Based Access Control): Configuration of system permissions to ensure each architectural layer is managed under the principle of least privilege.
+
+📥 Phase 2: BRONZE Layer - The Multi-Format Ingestion Challenge
+The Bronze layer was designed to ingest data from heterogeneous sources with significant structural inconsistencies. Key challenges were addressed across CSV, XML, JSON, and TXT files:
+
+Format Validation: Custom FILE FORMATS were engineered to handle XML files with deep nesting and TXT files containing hidden semi-structured data.
+
+Resilience & Data Quality: Technical "headaches" such as special characters, control rows (--- END OF FILE ---), and inconsistent delimiters were managed using defensive measures within the load formats.
+
+Idempotent Ingestion: Implementation of a COPY INTO workflow (supporting Snowpipe logic) that prevents data duplication and ensures the process is restartable without corrupting the state of the Raw tables.
+
+
+🧪 Phase 3: SILVER Layer - Transformation & Normalization
+In this phase, "dirty" data was transformed into the Canonical Model. The primary focus was normalizing business complexity:
+
+XML Parsing: Extensive use of the XMLGET function in combination with LATERAL FLATTEN to navigate deep hierarchies in transaction files, extracting critical attributes and handling nested tags.
+
+Advanced Data Cleansing: * Data Quality Flags: Handling null values in critical fields (such as Amount) by tagging quality issues instead of simple record deletion.
+
+Identity Normalization: Utilization of REGEXP_REPLACE to clean email addresses with syntax errors (duplicate dots and @ symbols) and COALESCE to standardize missing names and dates.
+
+Deduplication: Application of window functions (ROW_NUMBER) to guarantee transaction uniqueness based on ingestion timestamps.
+
+🛠️ Data Integrity & Missing Values Strategy
+One of the most critical challenges in this project was handling records with missing primary identifiers (e.g., Transaction ID, Order ID). I implemented a Preservation Over Deletion strategy to ensure that sales performance metrics remained accurate while maintaining traceability.
+
+1. Strategic Identity Generation (UUIDs)
+For records where a Transaction ID was missing but a valid Amount was present, I opted not to drop the row. Deleting these would have resulted in an underestimation of total sales. Instead:
+
+I generated a synthetic unique identifier using UUID_STRING() and prefixed it (e.g., TEMP-) to allow the business to identify these sales as "unlinked" but still account for their revenue.
+
+2. Defensive Data Normalization
+To ensure the Silver layer serves as a "Single Source of Truth," I used a combination of COALESCE, NULLIF, and TRY_CAST to handle empty strings and invalid formats. This approach prevents the downstream "N/A" or "Empty" clutter in reporting tools:
+
+Orders & Customers: Used placeholders like 'UNKNOWN_ORDER' and 'UNKNOWN_CUSTID' to keep foreign key relationships intact without losing the context of the sale.
+
+Date Standardization: Missing or malformed dates were defaulted to '1900-01-01'. This acts as a Data Quality Flag, allowing analysts to easily filter and evaluate records that require source-system correction.
+
+Email & Product Metadata: Applied a fallback to 'invalid_email' or 'no description' to maintain schema consistency in the final Star Schema.
+
+COALESCE(
+    NULLIF(TRIM(trans_id), ''), 
+    CONCAT('TEMP-', COALESCE(order_id, 'UNK'), '-', UUID_STRING())
+) AS transaction_id
+
+same as happend for amount I identify Amount as negative, instead of deleted or use ABS to convert as positive I decide to flag the data using a case statement because I need more bussiness insight in how to deal with negative value, but this approach at lest will notify the team something is going on with those values  
+
+
+🏆 Phase 4: GOLD Layer - Business Value & Star Schema
+The Gold layer represents the culmination of the process, proving that the Medallion structure is the most optimal approach for data scaling:
+
+Star Schema Modeling: Processes were segmented into a central Fact Table (FACT_SALES) and descriptive Dimension Tables (DIM_CUSTOMERS, DIM_PRODUCTS), optimizing query efficiency.
+
+Analytical Consumption: The final structure allows for instantaneous answers to complex business questions, such as sales analysis by channel, order status, and customer segment (VIP, Premier, Regular).
+
+🛠️ Tech Stack
+Platform: Snowflake (Cloud Data Warehouse)
+
+Language: Snowflake SQL (UDFs, Window Functions, Regex, XML Parsing)
+
+Architecture: Medallion (Bronze/Silver/Gold) / Star Schema
+
+[def]: image.png
